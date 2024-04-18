@@ -1,0 +1,44 @@
+<component name="libraryTable">
+  <library name="GOPATH &lt;chandy-lamport&gt;">
+    <CLASSES>
+      <root url="file://$PROJECT_DIR$/../lockservice" />
+      <root url="file://$PROJECT_DIR$/../kvraft" />
+      <root url="file://$PROJECT_DIR$/../shardmaster" />
+      <root url="file://$PROJECT_DIR$/../go-intro" />
+      <root url="file://$PROJECT_DIR$/../diskv" />
+      <root url="file://$PROJECT_DIR$/../paxos-shardmaster" />
+      <root url="file://$PROJECT_DIR$/../main" />
+      <root url="file://$PROJECT_DIR$/../kvpaxos" />
+      <root url="file://$PROJECT_DIR$/../mapreduce" />
+      <root url="file://$PROJECT_DIR$/../paxos" />
+      <root url="file://$PROJECT_DIR$/../pbservice" />
+      <root url="file://$PROJECT_DIR$/../labrpc" />
+      <root url="file://$PROJECT_DIR$/../raft" />
+      <root url="file://$PROJECT_DIR$/../viewservice" />
+      <root url="file://$PROJECT_DIR$/../paxos-shardkv" />
+      <root url="file://$PROJECT_DIR$/../shardkv" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="file://$PROJECT_DIR$/../lockservice" />
+      <root url="file://$PROJECT_DIR$/../kvraft" />
+      <root url="file://$PROJECT_DIR$/../shardmaster" />
+      <root url="file://$PROJECT_DIR$/../go-intro" />
+      <root url="file://$PROJECT_DIR$/../diskv" />
+      <root url="file://$PROJECT_DIR$/../paxos-shardmaster" />
+      <root url="file://$PROJECT_DIR$/../main" />
+      <root url="file://$PROJECT_DIR$/../kvpaxos" />
+      <root url="file://$PROJECT_DIR$/../mapreduce" />
+      <root url="file://$PROJECT_DIR$/../paxos" />
+      <root url="file://$PROJECT_DIR$/../pbservice" />
+      <root url="file://$PROJECT_DIR$/../labrpc" />
+      <root url="file://$PROJECT_DIR$/../raft" />
+      <root url="file://$PROJECT_DIR$/../viewservice" />
+      <root url="file://$PROJECT_DIR$/../paxos-shardkv" />
+      <root url="file://$PROJECT_DIR$/../shardkv" />
+    </SOURCES>
+    <excluded>
+      <root url="file://$PROJECT_DIR$" />
+    </excluded>
+  </library>
+</component>
