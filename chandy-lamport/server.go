@@ -14,6 +14,7 @@ type Server struct {
 	outboundLinks map[string]*Link // key = link.dest
 	inboundLinks  map[string]*Link // key = link.src
 	// TODO: ADD MORE FIELDS HERE
+	chandyLamportStarted bool
 }
 
 // A unidirectional communication channel between two servers
@@ -31,6 +32,7 @@ func NewServer(id string, tokens int, sim *Simulator) *Server {
 		sim,
 		make(map[string]*Link),
 		make(map[string]*Link),
+		false,
 	}
 }
 
@@ -91,4 +93,20 @@ func (server *Server) HandlePacket(src string, message interface{}) {
 // This should be called only once per server.
 func (server *Server) StartSnapshot(snapshotId int) {
 	// TODO: IMPLEMENT ME
+
+	// Record local state & send out to all other outbound interfaces
+
+	if server.chandyLamportStarted {
+		return
+	} else {
+		link := server.outboundLinks[server.Id]
+		link.events.Push(SendMessageEvent{
+			server.Id,
+			link.dest,
+			MarkerMessage{snapshotId},
+			server.sim.GetReceiveTime()})
+		server.chandyLamportStarted = true
+	}
+	return
+
 }
