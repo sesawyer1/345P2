@@ -108,6 +108,8 @@ func (sim *Simulator) StartSnapshot(serverId string) {
 	sim.nextSnapshotId++
 	sim.logger.RecordEvent(sim.servers[serverId], StartSnapshot{serverId, snapshotId})
 	// TODO: IMPLEMENT ME
+	sim.servers[serverId].StartSnapshot(snapshotId) // start snapshot on the server
+
 }
 
 // Callback for servers to notify the simulator that the snapshot process has
@@ -115,6 +117,7 @@ func (sim *Simulator) StartSnapshot(serverId string) {
 func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 	sim.logger.RecordEvent(sim.servers[serverId], EndSnapshot{serverId, snapshotId})
 	// TODO: IMPLEMENT ME
+	sim.servers[serverId].HandlePacket(serverId, MarkerMessage{snapshotId}) // this might be wrong
 }
 
 // Collect and merge snapshot state from all the servers.
@@ -122,5 +125,15 @@ func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 func (sim *Simulator) CollectSnapshot(snapshotId int) *SnapshotState {
 	// TODO: IMPLEMENT ME
 	snap := SnapshotState{snapshotId, make(map[string]int), make([]*SnapshotMessage, 0)}
+
+	for id := range sim.servers {
+		snap.tokens[id] = sim.servers[id].Tokens
+		for _, msg := range sim.servers[id].messages {
+			snap.messages = append(snap.messages, &SnapshotMessage{msg.src, sim.servers[id].Id, msg.message})
+
+		}
+
+	}
+
 	return &snap
 }

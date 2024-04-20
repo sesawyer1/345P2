@@ -15,6 +15,13 @@ type Server struct {
 	inboundLinks  map[string]*Link // key = link.src
 	// TODO: ADD MORE FIELDS HERE
 	chandyLamportStarted bool
+	messages             []Message
+	snapshotID           int
+}
+
+type Message struct {
+	message string
+	src     string
 }
 
 // A unidirectional communication channel between two servers
@@ -33,6 +40,8 @@ func NewServer(id string, tokens int, sim *Simulator) *Server {
 		make(map[string]*Link),
 		make(map[string]*Link),
 		false,
+		make([]Message, 0),
+		0,
 	}
 }
 
@@ -87,6 +96,29 @@ func (server *Server) SendTokens(numTokens int, dest string) {
 // should notify the simulator by calling `sim.NotifySnapshotComplete`.
 func (server *Server) HandlePacket(src string, message interface{}) {
 	// TODO: IMPLEMENT ME
+
+	if !server.chandyLamportStarted {
+		// record state as empty sequence
+		server.messages = make([]Message, 0)
+		server.chandyLamportStarted = true
+
+		// follow marker sending rule
+		link := server.outboundLinks[src]
+		link.events.Push(SendMessageEvent{
+			src,
+			link.dest,
+			MarkerMessage{server.snapshotID},
+			server.sim.GetReceiveTime()})
+		server.snapshotID += 1
+
+	} else {
+		server.messages = append(server.messages, Message{message: message.(string), src: src})
+	}
+
+	server.sim.NotifySnapshotComplete(server.Id, server.snapshotID)
+
+	return
+
 }
 
 // Start the chandy-lamport snapshot algorithm on this server.
@@ -95,7 +127,7 @@ func (server *Server) StartSnapshot(snapshotId int) {
 	// TODO: IMPLEMENT ME
 
 	// Record local state & send out to all other outbound interfaces
-
+	server.snapshotID = snapshotId
 	if server.chandyLamportStarted {
 		return
 	} else {
@@ -106,6 +138,7 @@ func (server *Server) StartSnapshot(snapshotId int) {
 			MarkerMessage{snapshotId},
 			server.sim.GetReceiveTime()})
 		server.chandyLamportStarted = true
+		server.snapshotID += 1
 	}
 	return
 
