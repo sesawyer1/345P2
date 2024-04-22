@@ -19,7 +19,12 @@ type Server struct {
 	chandyLamportStarted bool
 	messages             []Message
 	snapshotID           int
-	snapshotTokens       int
+	seenMarkers          bool
+	currentState         localState
+}
+
+type localState struct {
+	tokens int
 }
 
 type Message struct {
@@ -45,7 +50,8 @@ func NewServer(id string, tokens int, sim *Simulator) *Server {
 		false,
 		make([]Message, 0),
 		0,
-		0,
+		false,
+		localState{tokens},
 	}
 }
 
@@ -100,14 +106,17 @@ func (server *Server) SendTokens(numTokens int, dest string) {
 // should notify the simulator by calling `sim.NotifySnapshotComplete`.
 func (server *Server) HandlePacket(src string, message interface{}) {
 	// TODO: IMPLEMENT ME
+	log.Printf("Received message from %s with type %T", src, message)
 	switch msg := message.(type) {
 	case MarkerMessage:
-		if !server.chandyLamportStarted {
-			// record state as empty sequence
+		log.Printf("Handling MarkerMessage with snapshotID %d", msg.snapshotId)
+		if !server.seenMarkers {
+
+			// record local state
+			server.currentState.tokens = server.Tokens
 			server.messages = make([]Message, 0)
 			server.chandyLamportStarted = true
-			server.snapshotID = msg.snapshotId
-			server.snapshotTokens = server.Tokens
+			server.snapshotID = message.(MarkerMessage).snapshotId
 
 			// follow marker sending rule
 			for _, link := range server.outboundLinks {
@@ -117,19 +126,29 @@ func (server *Server) HandlePacket(src string, message interface{}) {
 					MarkerMessage{server.snapshotID},
 					server.sim.GetReceiveTime()})
 			}
-		}
 
-	case TokenMessage:
-		if server.chandyLamportStarted {
-			server.messages = append(server.messages, Message{msg.String(), src})
-		} else {
-			server.Tokens += msg.numTokens
+			for _, link := range server.inboundLinks {
+				if link.src == src {
+					server.messages = append(server.messages, Message{message.(MarkerMessage).String(), src})
+				}
+			}
+
+			server.seenMarkers = true
+			log.Printf("Marker processing completed: snapshotID %d", server.snapshotID)
 		}
+		server.sim.NotifySnapshotComplete(server.Id, server.snapshotID)
+		log.Printf("messages: %v", server.messages)
+	case TokenMessage:
+
+		log.Printf("Handling TokenMessage with content: %d", msg.numTokens)
+		server.Tokens += message.(TokenMessage).numTokens
+		server.sim.logger.RecordEvent(server, ReceivedMessageEvent{src, server.Id, message})
+		log.Printf("Token processing completed")
+
+	default:
+		log.Printf("Received unexpected message type %T from %s", msg, src)
 
 	}
-
-	server.sim.NotifySnapshotComplete(server.Id, server.snapshotID)
-
 }
 
 // Start the chandy-lamport snapshot algorithm on this server.
@@ -147,6 +166,10 @@ func (server *Server) StartSnapshot(snapshotId int) {
 			return
 		}
 
+		server.chandyLamportStarted = true
+		server.snapshotID = snapshotId
+		server.currentState.tokens = server.Tokens
+
 		for _, link := range server.outboundLinks {
 			link.events.Push(SendMessageEvent{
 				server.Id,
@@ -154,9 +177,7 @@ func (server *Server) StartSnapshot(snapshotId int) {
 				MarkerMessage{snapshotId},
 				server.sim.GetReceiveTime()})
 		}
-		server.chandyLamportStarted = true
-		server.snapshotID = snapshotId
-		server.snapshotTokens = server.Tokens
+
 	}
 
 }

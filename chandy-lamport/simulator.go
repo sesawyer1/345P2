@@ -142,7 +142,7 @@ func (sim *Simulator) CollectSnapshot(snapshotId int) *SnapshotState {
 	snap := SnapshotState{snapshotId, make(map[string]int), make([]*SnapshotMessage, 0)}
 
 	for id := range sim.servers {
-		snap.tokens[id] = sim.servers[id].snapshotTokens
+		snap.tokens[id] = sim.servers[id].currentState.tokens
 		for _, msg := range sim.servers[id].messages {
 			snap.messages = append(snap.messages, &SnapshotMessage{msg.src, id, msg.message})
 
