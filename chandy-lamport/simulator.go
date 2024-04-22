@@ -106,9 +106,14 @@ func (sim *Simulator) Tick() {
 func (sim *Simulator) StartSnapshot(serverId string) {
 	snapshotId := sim.nextSnapshotId
 	sim.nextSnapshotId++
-	sim.logger.RecordEvent(sim.servers[serverId], StartSnapshot{serverId, snapshotId})
+
+	server, ok := sim.servers[serverId]
+	if !ok || server == nil {
+		log.Fatalf("Server %v does not exist\n", serverId)
+	}
+	sim.logger.RecordEvent(server, StartSnapshot{serverId, snapshotId})
 	// TODO: IMPLEMENT ME
-	sim.servers[serverId].StartSnapshot(snapshotId) // start snapshot on the server
+	server.StartSnapshot(snapshotId) // start snapshot on the server
 
 }
 
@@ -117,7 +122,17 @@ func (sim *Simulator) StartSnapshot(serverId string) {
 func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 	sim.logger.RecordEvent(sim.servers[serverId], EndSnapshot{serverId, snapshotId})
 	// TODO: IMPLEMENT ME
-	sim.servers[serverId].HandlePacket(serverId, MarkerMessage{snapshotId}) // this might be wrong
+	done := true
+	for _, server := range sim.servers {
+		if server.snapshotID != snapshotId {
+			done = false
+			break
+		}
+	}
+	if done {
+		sim.CollectSnapshot(snapshotId)
+
+	}
 }
 
 // Collect and merge snapshot state from all the servers.
@@ -127,9 +142,9 @@ func (sim *Simulator) CollectSnapshot(snapshotId int) *SnapshotState {
 	snap := SnapshotState{snapshotId, make(map[string]int), make([]*SnapshotMessage, 0)}
 
 	for id := range sim.servers {
-		snap.tokens[id] = sim.servers[id].Tokens
+		snap.tokens[id] = sim.servers[id].snapshotTokens
 		for _, msg := range sim.servers[id].messages {
-			snap.messages = append(snap.messages, &SnapshotMessage{msg.src, sim.servers[id].Id, msg.message})
+			snap.messages = append(snap.messages, &SnapshotMessage{msg.src, id, msg.message})
 
 		}
 

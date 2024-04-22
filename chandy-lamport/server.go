@@ -1,6 +1,8 @@
 package chandy_lamport
 
-import "log"
+import (
+	"log"
+)
 
 // The main participant of​ the distributed snapshot​ protocol.
 // Servers exchange token messages and marker messages among each other.
@@ -17,6 +19,7 @@ type Server struct {
 	chandyLamportStarted bool
 	messages             []Message
 	snapshotID           int
+	snapshotTokens       int
 }
 
 type Message struct {
@@ -41,6 +44,7 @@ func NewServer(id string, tokens int, sim *Simulator) *Server {
 		make(map[string]*Link),
 		false,
 		make([]Message, 0),
+		0,
 		0,
 	}
 }
@@ -96,28 +100,35 @@ func (server *Server) SendTokens(numTokens int, dest string) {
 // should notify the simulator by calling `sim.NotifySnapshotComplete`.
 func (server *Server) HandlePacket(src string, message interface{}) {
 	// TODO: IMPLEMENT ME
+	switch msg := message.(type) {
+	case MarkerMessage:
+		if !server.chandyLamportStarted {
+			// record state as empty sequence
+			server.messages = make([]Message, 0)
+			server.chandyLamportStarted = true
+			server.snapshotID = msg.snapshotId
+			server.snapshotTokens = server.Tokens
 
-	if !server.chandyLamportStarted {
-		// record state as empty sequence
-		server.messages = make([]Message, 0)
-		server.chandyLamportStarted = true
+			// follow marker sending rule
+			for _, link := range server.outboundLinks {
+				link.events.Push(SendMessageEvent{
+					server.Id,
+					link.dest,
+					MarkerMessage{server.snapshotID},
+					server.sim.GetReceiveTime()})
+			}
+		}
 
-		// follow marker sending rule
-		link := server.outboundLinks[src]
-		link.events.Push(SendMessageEvent{
-			src,
-			link.dest,
-			MarkerMessage{server.snapshotID},
-			server.sim.GetReceiveTime()})
-		server.snapshotID += 1
+	case TokenMessage:
+		if server.chandyLamportStarted {
+			server.messages = append(server.messages, Message{msg.String(), src})
+		} else {
+			server.Tokens += msg.numTokens
+		}
 
-	} else {
-		server.messages = append(server.messages, Message{message: message.(string), src: src})
 	}
 
 	server.sim.NotifySnapshotComplete(server.Id, server.snapshotID)
-
-	return
 
 }
 
@@ -127,19 +138,25 @@ func (server *Server) StartSnapshot(snapshotId int) {
 	// TODO: IMPLEMENT ME
 
 	// Record local state & send out to all other outbound interfaces
-	server.snapshotID = snapshotId
+
 	if server.chandyLamportStarted {
 		return
 	} else {
-		link := server.outboundLinks[server.Id]
-		link.events.Push(SendMessageEvent{
-			server.Id,
-			link.dest,
-			MarkerMessage{snapshotId},
-			server.sim.GetReceiveTime()})
+		if len(server.outboundLinks) == 0 {
+			log.Println("Error: Server has no outbound links")
+			return
+		}
+
+		for _, link := range server.outboundLinks {
+			link.events.Push(SendMessageEvent{
+				server.Id,
+				link.dest,
+				MarkerMessage{snapshotId},
+				server.sim.GetReceiveTime()})
+		}
 		server.chandyLamportStarted = true
-		server.snapshotID += 1
+		server.snapshotID = snapshotId
+		server.snapshotTokens = server.Tokens
 	}
-	return
 
 }
