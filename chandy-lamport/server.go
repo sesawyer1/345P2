@@ -18,6 +18,8 @@ type Server struct {
 	messages        []Message
 	receivedMarker  bool
 	currSnapshotId  int
+	snapshotTime    int
+	markersReceived map[string]bool
 }
 
 // type LocalState struct {
@@ -50,6 +52,8 @@ func NewServer(id string, tokens int, sim *Simulator) *Server {
 		make([]Message, 0),
 		false,
 		0,
+		0,
+		make(map[string]bool),
 	}
 }
 
@@ -107,14 +111,18 @@ func (server *Server) HandlePacket(src string, message interface{}) {
 
 	switch msg := message.(type) {
 	case TokenMessage:
-		server.Tokens += msg.numTokens
+		if !(server.snapshotStarted) {
+			server.Tokens += msg.numTokens
+
+		}
 		server.messages = append(server.messages, Message{msg.String(), src})
 
 	case MarkerMessage:
 		if !server.snapshotStarted {
 			server.StartSnapshot(msg.snapshotId)
 		} else {
-
+			server.receivedMarker = true
+			server.markersReceived[src] = true
 			if link, exists := server.inboundLinks[src]; exists {
 				// go through every message received by the link and add to the server's message list
 				for !(link.events.Empty()) {
@@ -126,6 +134,9 @@ func (server *Server) HandlePacket(src string, message interface{}) {
 					}
 				}
 			}
+
+		}
+		if len(server.markersReceived) == len(server.inboundLinks) {
 			server.sim.NotifySnapshotComplete(server.Id, msg.snapshotId)
 		}
 	}
@@ -136,11 +147,11 @@ func (server *Server) HandlePacket(src string, message interface{}) {
 // This should be called only once per server.
 func (server *Server) StartSnapshot(snapshotId int) {
 	// TODO: IMPLEMENT ME
-	if server.snapshotStarted {
+	if server.snapshotStarted && server.currSnapshotId == snapshotId {
 		return
 	} else {
 		// record local state
-		server.sim.logger.RecordEvent(server, StartSnapshot{server.Id, snapshotId})
+		// server.sim.logger.RecordEvent(server, StartSnapshot{server.Id, snapshotId})
 
 		// send marker messages
 		server.SendToNeighbors(MarkerMessage{snapshotId})
