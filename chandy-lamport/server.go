@@ -154,10 +154,22 @@ func (server *Server) StartSnapshot(snapshotId int) {
 		// server.sim.logger.RecordEvent(server, StartSnapshot{server.Id, snapshotId})
 
 		// send marker messages
-		server.SendToNeighbors(MarkerMessage{snapshotId})
+		for _, link := range server.outboundLinks {
+			if value, exists := server.markersReceived[link.dest]; exists {
+				if value {
+					continue
+				}
+			} else {
+				link.events.Push(SendMessageEvent{
+					server.Id,
+					link.dest,
+					MarkerMessage{snapshotId},
+					server.sim.GetReceiveTime()})
+			}
 
-		server.snapshotStarted = true
-		server.currSnapshotId = snapshotId
+			server.snapshotStarted = true
+			server.currSnapshotId = snapshotId
+		}
+
 	}
-
 }
