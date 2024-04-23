@@ -24,7 +24,12 @@ type Simulator struct {
 	servers        map[string]*Server // key = server ID
 	logger         *Logger
 	// TODO: ADD MORE FIELDS HERE
-	doneServers map[string]bool // key = server ID, value bool
+	status map[int]SnapStatus
+}
+
+type SnapStatus struct {
+	completed   bool
+	doneServers map[string]bool
 }
 
 func NewSimulator() *Simulator {
@@ -33,7 +38,7 @@ func NewSimulator() *Simulator {
 		0,
 		make(map[string]*Server),
 		NewLogger(),
-		make(map[string]bool),
+		make(map[int]SnapStatus),
 	}
 }
 
@@ -124,11 +129,20 @@ func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 	// don't want to call snapshot we want to update a field that signals the snapshot is done for this particular server
 	// want a list of servers that have completed the snapshot
 	// need snapshotId and serverId
-	// sim.doneServers[serverId] = true
-	// done := false
-	// if len(sim.doneServers) == len(sim.servers) {
-	// 	done = true
-	// }
+
+	value, exist := sim.status[snapshotId]
+
+	if !exist {
+		sim.status[snapshotId] = SnapStatus{false, make(map[string]bool)}
+		sim.status[snapshotId].doneServers[serverId] = true
+	} else {
+		sim.status[snapshotId].doneServers[serverId] = true
+	}
+
+	// check if all done
+	if len(sim.status[snapshotId].doneServers) == len(sim.servers) {
+		sim.status[snapshotId].completed = true
+	}
 
 }
 
