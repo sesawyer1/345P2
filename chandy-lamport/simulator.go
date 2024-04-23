@@ -121,20 +121,20 @@ func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 	sim.logger.RecordEvent(sim.servers[serverId], EndSnapshot{serverId, snapshotId})
 	// TODO: IMPLEMENT ME
 
-	sim.doneServers[serverId] = true
-	done := false
-	if len(sim.doneServers) == len(sim.servers) {
-		done = true
-	}
+	// don't want to call snapshot we want to update a field that signals the snapshot is done for this particular server
+	// want a list of servers that have completed the snapshot
+	// need snapshotId and serverId
+	// sim.doneServers[serverId] = true
+	// done := false
+	// if len(sim.doneServers) == len(sim.servers) {
+	// 	done = true
+	// }
 
-	if done {
-		sim.CollectSnapshot(snapshotId)
-	}
 }
 
 // Collect and merge snapshot state from all the servers.
 // This function blocks until the snapshot process has completed on all servers.
-func (sim *Simulator) CollectSnapshot(snapshotId int) *SnapshotState {
+func (sim *Simulator) CollectSnapshotFromAllServers(snapshotId int) *SnapshotState {
 	// TODO: IMPLEMENT ME
 	snap := SnapshotState{snapshotId, make(map[string]int), make([]*SnapshotMessage, 0)}
 

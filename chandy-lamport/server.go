@@ -111,10 +111,9 @@ func (server *Server) HandlePacket(src string, message interface{}) {
 
 	switch msg := message.(type) {
 	case TokenMessage:
-		if !(server.snapshotStarted) {
-			server.Tokens += msg.numTokens
-
-		}
+		// updating the tokens is indpendent of the snapshot process
+		server.Tokens += msg.numTokens
+		// record these 
 		server.messages = append(server.messages, Message{msg.String(), src})
 
 	case MarkerMessage:
@@ -123,17 +122,8 @@ func (server *Server) HandlePacket(src string, message interface{}) {
 		} else {
 			server.receivedMarker = true
 			server.markersReceived[src] = true
-			if link, exists := server.inboundLinks[src]; exists {
-				// go through every message received by the link and add to the server's message list
-				for !(link.events.Empty()) {
-					event := link.events.Pop()
-					switch event.(type) {
-					case ReceivedMessageEvent:
-						server.messages = append(server.messages, Message{event.(ReceivedMessageEvent).message.(TokenMessage).String(), event.(ReceivedMessageEvent).src})
-						server.Tokens += event.(ReceivedMessageEvent).message.(TokenMessage).numTokens
-					}
-				}
-			}
+
+			// only monitor these 
 
 		}
 		if len(server.markersReceived) == len(server.inboundLinks) {
@@ -147,28 +137,39 @@ func (server *Server) HandlePacket(src string, message interface{}) {
 // This should be called only once per server.
 func (server *Server) StartSnapshot(snapshotId int) {
 	// TODO: IMPLEMENT ME
-	if server.snapshotStarted && server.currSnapshotId == snapshotId {
-		return
-	} else {
-		// record local state
-		// server.sim.logger.RecordEvent(server, StartSnapshot{server.Id, snapshotId})
 
-		// send marker messages
-		for _, link := range server.outboundLinks {
-			if value, exists := server.markersReceived[link.dest]; exists {
-				if value {
-					continue
-				}
-			} else {
-				link.events.Push(SendMessageEvent{
-					server.Id,
-					link.dest,
-					MarkerMessage{snapshotId},
-					server.sim.GetReceiveTime()})
-			}
+	// Step 1:
+	server.snapshotStarted = true
+	server.snapshotTokens = server.Tokens
 
-			server.snapshotStarted = true
-			server.currSnapshotId = snapshotId
+
+	// Step 2:
+	server.SendToNeighbors(MarkerMessage{snapshotId})
+
+
+
+	// if server.snapshotStarted && server.currSnapshotId == snapshotId {
+	// 	return
+	// } else {
+
+	// 	// send marker messages
+	// 	for _, link := range server.outboundLinks {
+	// 		if value, exists := server.markersReceived[link.dest]; exists {
+	// 			if value {
+	// 				continue
+	// 			}
+	// 		} else {
+	// 			link.events.Push(SendMessageEvent{
+	// 				server.Id,
+	// 				link.dest,
+	// 				MarkerMessage{snapshotId},
+	// 				server.sim.GetReceiveTime()})
+	// 		}
+
+	// 		server.snapshotStarted = true
+	// 		server.currSnapshotId = snapshotId
+	// 		// preserve the tokens, process state and channel state 
+	// 		server.messages = append(server.messages, Message{msg.String(), src}) // also needs to be included
 		}
 
 	}
