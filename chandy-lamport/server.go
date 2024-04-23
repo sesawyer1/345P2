@@ -140,7 +140,7 @@ func (server *Server) StartSnapshot(snapshotId int) {
 		return
 	} else {
 		// record local state
-		server.sim.logger.RecordEvent(server, SnapshotEvent{server.Id})
+		server.sim.logger.RecordEvent(server, StartSnapshot{server.Id, snapshotId})
 
 		// send marker messages
 		server.SendToNeighbors(MarkerMessage{snapshotId})
