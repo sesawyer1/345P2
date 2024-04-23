@@ -130,7 +130,7 @@ func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 	// want a list of servers that have completed the snapshot
 	// need snapshotId and serverId
 
-	value, exist := sim.status[snapshotId]
+	_, exist := sim.status[snapshotId]
 
 	if !exist {
 		sim.status[snapshotId] = SnapStatus{false, make(map[string]bool)}
@@ -141,7 +141,10 @@ func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 
 	// check if all done
 	if len(sim.status[snapshotId].doneServers) == len(sim.servers) {
-		sim.status[snapshotId].completed = true
+		simStat := sim.status[snapshotId]
+		simStat.completed = true
+
+		sim.status[snapshotId] = simStat
 	}
 
 }
