@@ -20,11 +20,11 @@ type Server struct {
 	currSnapshotId  int
 }
 
-type LocalState struct {
-	Id         string
-	snapshotId int
-	tokens     int
-}
+// type LocalState struct {
+// 	Id         string
+// 	snapshotId int
+// 	tokens     int
+// }
 
 type Message struct {
 	content string
@@ -105,23 +105,30 @@ func (server *Server) SendTokens(numTokens int, dest string) {
 func (server *Server) HandlePacket(src string, message interface{}) {
 	// TODO: IMPLEMENT ME
 
-	// if not started snapshot, do start snapshot
-	if !server.snapshotStarted {
-		server.StartSnapshot(server.currSnapshotId)
-	}
-	// record message received on not this interface
-	for _, link := range server.outboundLinks {
-		// go through every message received by the link and add to the server's message list
-		for !(link.events.Empty()) {
-			event := link.events.Pop()
-			switch event.(type) {
-			case ReceivedMessageEvent:
-				server.messages = append(server.messages, Message{event.(ReceivedMessageEvent).message.(TokenMessage).String(), event.(ReceivedMessageEvent).src})
+	switch msg := message.(type) {
+	case TokenMessage:
+		server.Tokens += msg.numTokens
+		server.messages = append(server.messages, Message{msg.String(), src})
+
+	case MarkerMessage:
+		if !server.snapshotStarted {
+			server.StartSnapshot(msg.snapshotId)
+		} else {
+
+			if link, exists := server.inboundLinks[src]; exists {
+				// go through every message received by the link and add to the server's message list
+				for !(link.events.Empty()) {
+					event := link.events.Pop()
+					switch event.(type) {
+					case ReceivedMessageEvent:
+						server.messages = append(server.messages, Message{event.(ReceivedMessageEvent).message.(TokenMessage).String(), event.(ReceivedMessageEvent).src})
+						server.Tokens += event.(ReceivedMessageEvent).message.(TokenMessage).numTokens
+					}
+				}
 			}
+			server.sim.NotifySnapshotComplete(server.Id, msg.snapshotId)
 		}
 	}
-
-	server.sim.NotifySnapshotComplete(server.Id, server.currSnapshotId)
 
 }
 
@@ -133,7 +140,7 @@ func (server *Server) StartSnapshot(snapshotId int) {
 		return
 	} else {
 		// record local state
-		server.sim.logger.RecordEvent(server, LocalState{server.Id, snapshotId, server.Tokens})
+		server.sim.logger.RecordEvent(server, SnapshotEvent{server.Id})
 
 		// send marker messages
 		server.SendToNeighbors(MarkerMessage{snapshotId})
