@@ -24,7 +24,8 @@ type Simulator struct {
 	servers        map[string]*Server // key = server ID
 	logger         *Logger
 	// TODO: ADD MORE FIELDS HERE
-	status map[int]SnapStatus
+	status             map[int]SnapStatus
+	readyForCollection bool
 }
 
 type SnapStatus struct {
@@ -39,6 +40,7 @@ func NewSimulator() *Simulator {
 		make(map[string]*Server),
 		NewLogger(),
 		make(map[int]SnapStatus),
+		false,
 	}
 }
 
@@ -147,6 +149,14 @@ func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 		sim.status[snapshotId] = simStat
 	}
 
+	for _, stat := range sim.status {
+		if !stat.completed {
+			return
+		}
+	}
+
+	sim.readyForCollection = true
+
 }
 
 // Collect and merge snapshot state from all the servers.
@@ -154,13 +164,29 @@ func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 func (sim *Simulator) CollectSnapshot(snapshotId int) *SnapshotState {
 	// TODO: IMPLEMENT ME
 	snap := SnapshotState{snapshotId, make(map[string]int), make([]*SnapshotMessage, 0)}
+	if sim.readyForCollection {
 
-	for id := range sim.servers {
-		snap.tokens[id] = sim.servers[id].Tokens
-		for _, msg := range sim.servers[id].messages {
-			snap.messages = append(snap.messages, &SnapshotMessage{msg.src, id, msg.content})
+		for id := range sim.servers {
+			if log, ok := sim.servers[id].SnapshotLog[snapshotId]; ok {
+				snap.tokens[id] = log.currTokens // load in the snapshot tokens
+				for _, msg := range log.messages {
+					snap.messages = append(snap.messages, &SnapshotMessage{id, msg.dst, msg.content})
+				}
+			} else {
+				continue
+			}
+
 		}
+
+		for id := range sim.servers {
+			snap.tokens[id] = sim.servers[id].Tokens
+			for _, msg := range sim.servers[id].messages {
+				snap.messages = append(snap.messages, &SnapshotMessage{msg.src, id, msg.content})
+			}
+		}
+		return &snap
+	} else {
+		return nil
 	}
 
-	return &snap
 }

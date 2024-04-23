@@ -35,6 +35,7 @@ type SnapshotDetails struct {
 type Message struct {
 	content string
 	src     string
+	dst     string
 }
 
 // A unidirectional communication channel between two servers
@@ -122,13 +123,17 @@ func (server *Server) HandlePacket(src string, message interface{}) {
 		// updating the tokens is indpendent of the snapshot process
 		server.Tokens += msg.numTokens
 
-		// record message only if snapshot started and recording message from this channel ***NOT DONE
+		// record message only if snapshot started and recording message from this channel
 		if server.snapshotStarted {
 			for i, snap := range server.SnapshotLog {
 				channelOpen, exists := snap.openChannels[src]
 				if exists && channelOpen {
-					// THIS IS WRONG!!!! i is not the key, it is the snapshotid. might need pointers bc i think snap is just a copy of the struct
-					server.SnapshotLog[i].messages = append(server.SnapshotLog[i].messages, Message{msg.String(), src})
+
+					var snapLog = server.SnapshotLog[server.currSnapshotId]
+					snapLog.messages = append(server.SnapshotLog[i].messages, Message{msg.String(), src, server.Id})
+
+					server.SnapshotLog[server.currSnapshotId] = snapLog
+
 				}
 			}
 		}
@@ -183,6 +188,7 @@ func (server *Server) StartSnapshot(snapshotId int) {
 	// Step 1:
 	server.SnapshotLog[snapshotId] = SnapshotDetails{make(map[string]bool), make([]Message, 0), server.Tokens}
 	server.snapshotStarted = true
+	server.currSnapshotId = snapshotId
 
 	// Step 2:
 	server.SendToNeighbors(MarkerMessage{snapshotId})
@@ -192,31 +198,4 @@ func (server *Server) StartSnapshot(snapshotId int) {
 		server.SnapshotLog[snapshotId].openChannels[link.src] = true
 	}
 
-	// for _, serverId := range getSortedKeys(server.inboundLinks) {
-	// 	link := server.inboundLinks[serverId]
-	// 	server.messages = append(server.messages,link.events)
-	// }
-
-	// if server.snapshotStarted && server.currSnapshotId == snapshotId {
-	// 	return
-	// } else {
-
-	// 	// send marker messages
-	// 	for _, link := range server.outboundLinks {
-	// 		if value, exists := server.markersReceived[link.dest]; exists {
-	// 			if value {
-	// 				continue
-	// 			}
-	// 		} else {
-	// 			link.events.Push(SendMessageEvent{
-	// 				server.Id,
-	// 				link.dest,
-	// 				MarkerMessage{snapshotId},
-	// 				server.sim.GetReceiveTime()})
-	// 		}
-
-	// 		server.snapshotStarted = true
-	// 		server.currSnapshotId = snapshotId
-	// 		// preserve the tokens, process state and channel state
-	// 		server.messages = append(server.messages, Message{msg.String(), src}) // also needs to be included
 }
