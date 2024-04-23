@@ -24,6 +24,7 @@ type Simulator struct {
 	servers        map[string]*Server // key = server ID
 	logger         *Logger
 	// TODO: ADD MORE FIELDS HERE
+	doneServers map[string]bool // key = server ID, value bool
 }
 
 func NewSimulator() *Simulator {
@@ -32,6 +33,7 @@ func NewSimulator() *Simulator {
 		0,
 		make(map[string]*Server),
 		NewLogger(),
+		make(map[string]bool),
 	}
 }
 
@@ -106,14 +108,10 @@ func (sim *Simulator) Tick() {
 func (sim *Simulator) StartSnapshot(serverId string) {
 	snapshotId := sim.nextSnapshotId
 	sim.nextSnapshotId++
-
-	server, ok := sim.servers[serverId]
-	if !ok || server == nil {
-		log.Fatalf("Server %v does not exist\n", serverId)
-	}
-	sim.logger.RecordEvent(server, StartSnapshot{serverId, snapshotId})
+	sim.logger.RecordEvent(sim.servers[serverId], StartSnapshot{serverId, snapshotId})
 	// TODO: IMPLEMENT ME
-	server.StartSnapshot(snapshotId) // start snapshot on the server
+
+	sim.servers[serverId].StartSnapshot(snapshotId)
 
 }
 
@@ -122,16 +120,15 @@ func (sim *Simulator) StartSnapshot(serverId string) {
 func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 	sim.logger.RecordEvent(sim.servers[serverId], EndSnapshot{serverId, snapshotId})
 	// TODO: IMPLEMENT ME
-	done := true
-	for _, server := range sim.servers {
-		if server.snapshotID != snapshotId {
-			done = false
-			break
-		}
+
+	sim.doneServers[serverId] = true
+	done := false
+	if len(sim.doneServers) == len(sim.servers) {
+		done = true
 	}
+
 	if done {
 		sim.CollectSnapshot(snapshotId)
-
 	}
 }
 
@@ -142,12 +139,10 @@ func (sim *Simulator) CollectSnapshot(snapshotId int) *SnapshotState {
 	snap := SnapshotState{snapshotId, make(map[string]int), make([]*SnapshotMessage, 0)}
 
 	for id := range sim.servers {
-		snap.tokens[id] = sim.servers[id].currentState.tokens
+		snap.tokens[id] = sim.servers[id].Tokens
 		for _, msg := range sim.servers[id].messages {
-			snap.messages = append(snap.messages, &SnapshotMessage{msg.src, id, msg.message})
-
+			snap.messages = append(snap.messages, &SnapshotMessage{msg.src, id, msg.content})
 		}
-
 	}
 
 	return &snap
