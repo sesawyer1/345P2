@@ -20,13 +20,17 @@ type Server struct {
 	currSnapshotId  int
 	snapshotTime    int
 	markersReceived map[string]bool
+	// new ones
+	snapshotTokens    int
+	SnapshotLog       map[int]SnapshotDetails
+	receivedSnapshots map[int]bool
 }
 
-// type LocalState struct {
-// 	Id         string
-// 	snapshotId int
-// 	tokens     int
-// }
+type SnapshotDetails struct {
+	openChannels map[string]bool
+	messages     []Message
+	currTokens   int
+}
 
 type Message struct {
 	content string
@@ -54,6 +58,9 @@ func NewServer(id string, tokens int, sim *Simulator) *Server {
 		0,
 		0,
 		make(map[string]bool),
+		0,
+		make(map[int]SnapshotDetails),
+		make(map[int]bool),
 	}
 }
 
@@ -111,22 +118,57 @@ func (server *Server) HandlePacket(src string, message interface{}) {
 
 	switch msg := message.(type) {
 	case TokenMessage:
+
 		// updating the tokens is indpendent of the snapshot process
 		server.Tokens += msg.numTokens
-		// record these 
-		server.messages = append(server.messages, Message{msg.String(), src})
+
+		// record message only if snapshot started and recording message from this channel ***NOT DONE
+		if server.snapshotStarted {
+			for i, snap := range server.SnapshotLog {
+				channelOpen, exists := snap.openChannels[src]
+				if exists && channelOpen {
+					// THIS IS WRONG!!!! i is not the key, it is the snapshotid. might need pointers bc i think snap is just a copy of the struct
+					server.SnapshotLog[i].messages = append(server.SnapshotLog[i].messages, Message{msg.String(), src})
+				}
+			}
+		}
 
 	case MarkerMessage:
 		if !server.snapshotStarted {
-			server.StartSnapshot(msg.snapshotId)
-		} else {
-			server.receivedMarker = true
-			server.markersReceived[src] = true
+			// case 1:
+			server.snapshotStarted = true
 
-			// only monitor these 
+			// Record its own state
+			server.SnapshotLog[msg.snapshotId] = SnapshotDetails{make(map[string]bool), make([]Message, 0), server.Tokens}
+
+			// Mark channel with src as empty (do not make it open)
+			server.SnapshotLog[msg.snapshotId].openChannels[src] = false
+
+			// send marker to all neighbors
+			server.SendToNeighbors(message)
+
+			// record from all incoming channels except src *** NOT DONE
+			for _, link := range server.inboundLinks {
+				if link.src != src {
+					server.SnapshotLog[msg.snapshotId].openChannels[link.src] = true
+				}
+			}
+
+		} else {
+
+			// case 2: stop recording messages from src
+			server.SnapshotLog[msg.snapshotId].openChannels[src] = false
 
 		}
-		if len(server.markersReceived) == len(server.inboundLinks) {
+
+		// once have received markers from all inbound links, we are done
+		counter := 0
+		for _, open := range server.SnapshotLog[msg.snapshotId].openChannels {
+			if !open {
+				counter += 1
+			}
+		}
+		if counter == len(server.inboundLinks) {
 			server.sim.NotifySnapshotComplete(server.Id, msg.snapshotId)
 		}
 	}
@@ -139,14 +181,21 @@ func (server *Server) StartSnapshot(snapshotId int) {
 	// TODO: IMPLEMENT ME
 
 	// Step 1:
+	server.SnapshotLog[snapshotId] = SnapshotDetails{make(map[string]bool), make([]Message, 0), server.Tokens}
 	server.snapshotStarted = true
-	server.snapshotTokens = server.Tokens
-
 
 	// Step 2:
 	server.SendToNeighbors(MarkerMessage{snapshotId})
 
+	// Step 3: *** NOT DONE
+	for _, link := range server.inboundLinks {
+		server.SnapshotLog[snapshotId].openChannels[link.src] = true
+	}
 
+	// for _, serverId := range getSortedKeys(server.inboundLinks) {
+	// 	link := server.inboundLinks[serverId]
+	// 	server.messages = append(server.messages,link.events)
+	// }
 
 	// if server.snapshotStarted && server.currSnapshotId == snapshotId {
 	// 	return
@@ -168,9 +217,6 @@ func (server *Server) StartSnapshot(snapshotId int) {
 
 	// 		server.snapshotStarted = true
 	// 		server.currSnapshotId = snapshotId
-	// 		// preserve the tokens, process state and channel state 
+	// 		// preserve the tokens, process state and channel state
 	// 		server.messages = append(server.messages, Message{msg.String(), src}) // also needs to be included
-		}
-
-	}
 }
