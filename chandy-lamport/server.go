@@ -15,7 +15,6 @@ type Server struct {
 	inboundLinks  map[string]*Link // key = link.src
 	// TODO: ADD MORE FIELDS HERE
 	snapshotStarted bool
-	messages        []Message
 	receivedMarker  bool
 	currSnapshotId  int
 	snapshotTime    int
@@ -27,15 +26,11 @@ type Server struct {
 }
 
 type SnapshotDetails struct {
+	snapId       int
 	openChannels map[string]bool
-	messages     []Message
+	messages     []*SnapshotMessage
 	currTokens   int
-}
-
-type Message struct {
-	content string
-	src     string
-	dst     string
+	msgTokens    int
 }
 
 // A unidirectional communication channel between two servers
@@ -54,7 +49,6 @@ func NewServer(id string, tokens int, sim *Simulator) *Server {
 		make(map[string]*Link),
 		make(map[string]*Link),
 		false,
-		make([]Message, 0),
 		false,
 		0,
 		0,
@@ -125,27 +119,29 @@ func (server *Server) HandlePacket(src string, message interface{}) {
 
 		// record message only if snapshot started and recording message from this channel
 		if server.snapshotStarted {
-			for i, snap := range server.SnapshotLog {
+			for _, snap := range server.SnapshotLog {
 				channelOpen, exists := snap.openChannels[src]
 				if exists && channelOpen {
 
-					var snapLog = server.SnapshotLog[server.currSnapshotId]
-					snapLog.messages = append(server.SnapshotLog[i].messages, Message{msg.String(), src, server.Id})
-
-					server.SnapshotLog[server.currSnapshotId] = snapLog
+					var snapLog = server.SnapshotLog[snap.snapId]
+					snapLog.messages = append(server.SnapshotLog[snap.snapId].messages, &SnapshotMessage{src, server.Id, message})
+					snapLog.msgTokens += msg.numTokens
+					server.SnapshotLog[snap.snapId] = snapLog
 
 				}
 			}
 		}
 
 	case MarkerMessage:
-		if !server.snapshotStarted {
+		_, exists := server.receivedSnapshots[msg.snapshotId]
+		if !exists {
 			// case 1:
+			server.receivedSnapshots[msg.snapshotId] = true
 			server.snapshotStarted = true
 
 			// Record its own state
-			server.SnapshotLog[msg.snapshotId] = SnapshotDetails{make(map[string]bool), make([]Message, 0), server.Tokens}
-
+			server.SnapshotLog[msg.snapshotId] = SnapshotDetails{msg.snapshotId, make(map[string]bool), make([]*SnapshotMessage, 0), server.Tokens, 0}
+			log.Printf("snapshot id %v server id %v tokens %v\n", msg.snapshotId, server.Id, server.Tokens)
 			// Mark channel with src as empty (do not make it open)
 			server.SnapshotLog[msg.snapshotId].openChannels[src] = false
 
@@ -186,14 +182,16 @@ func (server *Server) StartSnapshot(snapshotId int) {
 	// TODO: IMPLEMENT ME
 
 	// Step 1:
-	server.SnapshotLog[snapshotId] = SnapshotDetails{make(map[string]bool), make([]Message, 0), server.Tokens}
+	server.SnapshotLog[snapshotId] = SnapshotDetails{snapshotId, make(map[string]bool), make([]*SnapshotMessage, 0), server.Tokens, 0}
+	log.Printf("snapshot id %v server id %v tokens %v\n", snapshotId, server.Id, server.Tokens)
 	server.snapshotStarted = true
+	server.receivedSnapshots[snapshotId] = true
 	server.currSnapshotId = snapshotId
 
 	// Step 2:
 	server.SendToNeighbors(MarkerMessage{snapshotId})
 
-	// Step 3: *** NOT DONE
+	// Step 3:
 	for _, link := range server.inboundLinks {
 		server.SnapshotLog[snapshotId].openChannels[link.src] = true
 	}

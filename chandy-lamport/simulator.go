@@ -24,8 +24,10 @@ type Simulator struct {
 	servers        map[string]*Server // key = server ID
 	logger         *Logger
 	// TODO: ADD MORE FIELDS HERE
-	status             map[int]SnapStatus
+	//status map[int]SnapStatus
+	status             *SyncMap
 	readyForCollection bool
+	//readyForCollection bool
 }
 
 type SnapStatus struct {
@@ -39,7 +41,8 @@ func NewSimulator() *Simulator {
 		0,
 		make(map[string]*Server),
 		NewLogger(),
-		make(map[int]SnapStatus),
+		//make(map[int]SnapStatus),
+		NewSyncMap(),
 		false,
 	}
 }
@@ -132,30 +135,39 @@ func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 	// want a list of servers that have completed the snapshot
 	// need snapshotId and serverId
 
-	_, exist := sim.status[snapshotId]
+	snapStat, _ := sim.status.Load(snapshotId)
 
-	if !exist {
-		sim.status[snapshotId] = SnapStatus{false, make(map[string]bool)}
-		sim.status[snapshotId].doneServers[serverId] = true
-	} else {
-		sim.status[snapshotId].doneServers[serverId] = true
+	if snapStat == nil {
+		snapStat = &SnapStatus{completed: false, doneServers: make(map[string]bool)}
 	}
+
+	stat := snapStat.(*SnapStatus)
+	stat.doneServers[serverId] = true
 
 	// check if all done
-	if len(sim.status[snapshotId].doneServers) == len(sim.servers) {
-		simStat := sim.status[snapshotId]
-		simStat.completed = true
-
-		sim.status[snapshotId] = simStat
+	if len(stat.doneServers) == len(sim.servers) {
+		stat.completed = true
 	}
 
-	for _, stat := range sim.status {
-		if !stat.completed {
-			return
+	sim.status.Store(snapshotId, stat)
+
+	// Check global completion
+	allComplete := true
+	sim.status.Range(func(key, value interface{}) bool {
+		if snapStatus, ok := value.(*SnapStatus); ok && !snapStatus.completed {
+			allComplete = false
+			return false // Stop the iteration as soon as one incomplete snapshot is found
 		}
-	}
+		return true
+	})
 
-	sim.readyForCollection = true
+	// Store the readiness in the map to maintain atomicity with other related states
+	if allComplete {
+		sim.status.Store("readyForCollection", true)
+		sim.readyForCollection = true
+	} else {
+		sim.status.Store("readyForCollection", false)
+	}
 
 }
 
@@ -164,29 +176,83 @@ func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 func (sim *Simulator) CollectSnapshot(snapshotId int) *SnapshotState {
 	// TODO: IMPLEMENT ME
 	snap := SnapshotState{snapshotId, make(map[string]int), make([]*SnapshotMessage, 0)}
-	if sim.readyForCollection {
 
-		for id := range sim.servers {
-			if log, ok := sim.servers[id].SnapshotLog[snapshotId]; ok {
-				snap.tokens[id] = log.currTokens // load in the snapshot tokens
-				for _, msg := range log.messages {
-					snap.messages = append(snap.messages, &SnapshotMessage{id, msg.dst, msg.content})
-				}
-			} else {
-				continue
-			}
-
+	//stall
+	for {
+		if ready, ok := sim.status.Load("readyForCollection"); ok && ready.(bool) {
+			log.Println(sim.readyForCollection)
+			break
 		}
-
-		for id := range sim.servers {
-			snap.tokens[id] = sim.servers[id].Tokens
-			for _, msg := range sim.servers[id].messages {
-				snap.messages = append(snap.messages, &SnapshotMessage{msg.src, id, msg.content})
-			}
-		}
-		return &snap
-	} else {
-		return nil
 	}
 
+	for id := range sim.servers {
+		if log, ok := sim.servers[id].SnapshotLog[snapshotId]; ok {
+			snap.tokens[id] = log.currTokens // load in the snapshot tokens
+			snap.messages = append(snap.messages, log.messages...)
+		} else {
+			continue
+		}
+
+	}
+	return &snap
 }
+
+// // Callback for servers to notify the simulator that the snapshot process has
+// // completed on a particular server
+// func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
+// 	sim.logger.RecordEvent(sim.servers[serverId], EndSnapshot{serverId, snapshotId})
+// 	// TODO: IMPLEMENT ME
+
+// 	// don't want to call snapshot we want to update a field that signals the snapshot is done for this particular server
+// 	// want a list of servers that have completed the snapshot
+// 	// need snapshotId and serverId
+
+// 	_, exist := sim.status[snapshotId]
+
+// 	if !exist {
+// 		sim.status[snapshotId] = SnapStatus{false, make(map[string]bool)}
+// 		sim.status[snapshotId].doneServers[serverId] = true
+// 	} else {
+// 		sim.status[snapshotId].doneServers[serverId] = true
+// 	}
+
+// 	// check if all done
+// 	if len(sim.status[snapshotId].doneServers) == len(sim.servers) {
+// 		simStat := sim.status[snapshotId]
+// 		simStat.completed = true
+
+// 		sim.status[snapshotId] = simStat
+// 	}
+
+// 	for _, stat := range sim.status {
+// 		if !stat.completed {
+// 			return
+// 		}
+// 	}
+
+// 	sim.readyForCollection = true
+
+// }
+
+// // Collect and merge snapshot state from all the servers.
+// // This function blocks until the snapshot process has completed on all servers.
+// func (sim *Simulator) CollectSnapshot(snapshotId int) *SnapshotState {
+// 	// TODO: IMPLEMENT ME
+// 	snap := SnapshotState{snapshotId, make(map[string]int), make([]*SnapshotMessage, 0)}
+
+// 	//stall
+// 	for !sim.readyForCollection {
+// 	}
+// 	log.Println(sim.readyForCollection)
+
+// 	for id := range sim.servers {
+// 		if log, ok := sim.servers[id].SnapshotLog[snapshotId]; ok {
+// 			snap.tokens[id] = log.currTokens // load in the snapshot tokens
+// 			snap.messages = append(snap.messages, log.messages...)
+// 		} else {
+// 			continue
+// 		}
+
+// 	}
+// 	return &snap
+// }
